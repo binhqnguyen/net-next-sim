@@ -74,6 +74,7 @@
 #include <linux/ipsec.h>
 #include <asm/unaligned.h>
 #include <net/netdma.h>
+#include <linux/ktime.h>
 
 int sysctl_tcp_timestamps __read_mostly = 1;
 int sysctl_tcp_window_scaling __read_mostly = 1;
@@ -775,7 +776,10 @@ static void tcp_set_rto(struct sock *sk)
 	 *    ACKs in some circumstances.
 	 */
 	inet_csk(sk)->icsk_rto = __tcp_set_rto(tp);
-
+	//BINH
+  //struct timeval t;
+  //do_gettimeofday(&t);
+	printk("%lld tcp_set_rto, icsk_timeout = %d , icsk_rto = %d , ssthresh = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_ssthresh);
 	/* 2. Fixups made earlier cannot be right.
 	 *    If we do not estimate RTO correctly without them,
 	 *    all the algo is pure shit and should be replaced
@@ -1915,6 +1919,8 @@ void tcp_enter_loss(struct sock *sk, int how)
 	struct sk_buff *skb;
 	bool new_recovery = false;
 
+	//BINH
+	printk("%lld tcp_enter_loss, icsk_timeout = %d , icsk_rto = %d , snd_cwnd = %d, ssthresh = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_cwnd, tp->snd_ssthresh);
 	/* Reduce ssthresh if it has not yet been made inside this window. */
 	if (icsk->icsk_ca_state <= TCP_CA_Disorder ||
 	    !after(tp->high_seq, tp->snd_una) ||
@@ -1961,9 +1967,12 @@ void tcp_enter_loss(struct sock *sk, int how)
 	 * suggests that the degree of reordering is over-estimated.
 	 */
 	if (icsk->icsk_ca_state <= TCP_CA_Disorder &&
-	    tp->sacked_out >= sysctl_tcp_reordering)
+	    tp->sacked_out >= sysctl_tcp_reordering){
 		tp->reordering = min_t(unsigned int, tp->reordering,
 				       sysctl_tcp_reordering);
+		//BINH
+		printk("%lld tcp_enter_loss, icsk_timeout = %d , icsk_rto = %d , snd_cwnd = %d , ssthresh = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_cwnd, tp->snd_ssthresh);
+	}
 	tcp_set_ca_state(sk, TCP_CA_Loss);
 	tp->high_seq = tp->snd_nxt;
 	TCP_ECN_queue_cwr(tp);
@@ -2890,6 +2899,8 @@ static inline bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 
+	//BINH
+  printk("%lld tcp_ack_update_rtt, icsk_timeout = %d , icsk_rto = %d , snd_cwnd = %d , ssthresh = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_cwnd, tp->snd_ssthresh);
 	/* Prefer RTT measured from ACK's timing to TS-ECR. This is because
 	 * broken middle-boxes or peers may corrupt TS-ECR fields. But
 	 * Karn's algorithm forbids taking RTT if some retransmitted data
@@ -3280,6 +3291,11 @@ static int tcp_ack_update_window(struct sock *sk, const struct sk_buff *skb, u32
 	}
 
 	tp->snd_una = ack;
+	
+	//BINH
+	//struct timeval t;
+  //do_gettimeofday(&t);
+ 	//printk("%lld tcp_ack_update_window, snd_cwnd = %d\n", (long long) ktime_to_ns(ktime_get()), tp->snd_cwnd);
 
 	return flag;
 }
@@ -3370,6 +3386,12 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	const int prior_unsacked = tp->packets_out - tp->sacked_out;
 	int acked = 0; /* Number of packets newly acked */
 	long sack_rtt_us = -1L;
+
+	//BINH
+	//struct timeval t;
+  //do_gettimeofday(&t);
+ 	//printk("%ld.%ld tcp_ack, snd_cwnd = %d\n", t.tv_sec, t.tv_usec, tp->snd_cwnd);
+ 	//printk("%lld tap_ack, snd_cwnd = %d\n", (long long) ktime_to_ns(ktime_get()), tp->snd_cwnd);
 
 	/* If the ack is older than previous acks
 	 * then we can probably ignore it.

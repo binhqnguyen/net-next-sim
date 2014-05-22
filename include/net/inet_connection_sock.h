@@ -22,6 +22,7 @@
 
 #include <net/inet_sock.h>
 #include <net/request_sock.h>
+#include <linux/ktime.h>
 
 #define INET_CSK_DEBUG 1
 
@@ -223,16 +224,21 @@ static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what,
 #endif
 		when = max_when;
 	}
+	//BINH
+  //struct timeval t;
+  //do_gettimeofday(&t);
 
 	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0 ||
 	    what == ICSK_TIME_EARLY_RETRANS || what ==  ICSK_TIME_LOSS_PROBE) {
 		icsk->icsk_pending = what;
 		icsk->icsk_timeout = jiffies + when;
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, icsk->icsk_timeout);
+    printk("%lld inet_csk_reset_xmit_timer, icsktimeout = %d , icskrto = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(icsk->icsk_timeout), jiffies_to_usecs(icsk->icsk_rto));
 	} else if (what == ICSK_TIME_DACK) {
 		icsk->icsk_ack.pending |= ICSK_ACK_TIMER;
 		icsk->icsk_ack.timeout = jiffies + when;
 		sk_reset_timer(sk, &icsk->icsk_delack_timer, icsk->icsk_ack.timeout);
+    printk("%lld inet_csk_reset_xmit_timer, icsktimeout = %d , icskrto = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(icsk->icsk_timeout), jiffies_to_usecs(icsk->icsk_rto));
 	}
 #ifdef INET_CSK_DEBUG
 	else {
