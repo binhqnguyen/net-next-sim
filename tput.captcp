@@ -1,0 +1,18 @@
+#!/bin/bash
+PCAP="emulated-0-0.pcap"
+echo "Usage: [(optional) pcap file, default $PCAP]"
+if [ $# -gt 0 ]; then
+	PCAP=$1
+fi
+SAMPLE=0.5 #each sample.
+UNIT="bit"
+FLOW_NAME="1.1"
+OUT_DIR="tput"
+
+mkdir -p $OUT_DIR
+
+captcp throughput -s $SAMPLE -u $UNIT -f $FLOW_NAME -i -o $OUT_DIR $PCAP
+
+#make plot
+cd $OUT_DIR
+make preview

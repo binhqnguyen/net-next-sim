@@ -1,0 +1,39 @@
+#!/bin/bash
+
+PCAP="emulated-2-0.pcap"
+START_TIME=0
+END_TIME=15
+EXECUTED_DIR="$( cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Usage: (optional) [pcap file, default $PCAP] [start time ($START_TIME)] [end time ($END_TIME)]"
+if [ $# -gt 0 ]; then
+	PCAP=$1
+fi
+if [ $# -gt 2 ]; then
+	START_TIME=$2
+	END_TIME=$3
+fi
+
+cd $EXECUTED_DIR
+./process_kernel_msgs.sh
+./tput.captcp
+./seq.captcp $PCAP $START_TIME $END_TIME
+./inflight.captcp
+
+#
+#Manually draw cwnd.pdf
+#
+echo "Plotting cwnd and timeout..."
+gnuplot -e "x1=$START_TIME;x2=$END_TIME" cwnd.gpi 
+epstopdf cwnd.eps
+
+#
+#Manually draw time-sequence-queue.pdf
+#
+echo "*********************"
+cd sequence && gnuplot -e "x1=$START_TIME;x2=$END_TIME" time-sequence-queue.gpi && epstopdf time-sequence.eps 
+cd ..
+
+#open inflight/inflight.eps
+open sequence/time-sequence.eps
+

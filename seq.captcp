@@ -1,0 +1,27 @@
+#!/bin/bash
+PCAP="emulated-2-0.pcap"
+START_TIME=0
+END_TIME=15
+
+echo "Usage: (optional) [pcap file, default $PCAP] [start time ($START_TIME)] [end time ($END_TIME)]"
+if [ $# -gt 0 ]; then
+	PCAP=$1
+fi
+if [ $# -gt 2 ]; then
+	START_TIME=$2
+	END_TIME=$3
+fi
+
+SAMPLE=0.01 #each sample.
+UNIT="kilobit"
+FLOW_NAME=1.1
+OUT_DIR="sequence"
+
+mkdir -p $OUT_DIR
+
+captcp timesequence -e -f $FLOW_NAME -t $START_TIME:$END_TIME -i -o $OUT_DIR $PCAP
+
+cd $OUT_DIR
+make preview
+
+open time-sequence.pdf

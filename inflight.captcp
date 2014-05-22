@@ -1,0 +1,19 @@
+#!/bin/bash
+PCAP="emulated-2-0.pcap"
+START_TIME=0
+END_TIME=10
+
+echo "Usage: (optional) [pcap file, default $PCAP]"
+if [ $# -gt 0 ]; then
+	PCAP=$1
+fi
+
+FLOW_NAME=1.1
+OUT_DIR="inflight"
+
+mkdir -p $OUT_DIR
+
+captcp inflight -f $FLOW_NAME -i -o $OUT_DIR $PCAP
+
+cd $OUT_DIR
+make preview

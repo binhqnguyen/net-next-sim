@@ -1,0 +1,13 @@
+#!/bin/bash
+PCAP="emulated-2-0.pcap"
+echo "Usage: [(optional) pcap file, default $PCAP]"
+if [ $# -gt 0 ]; then
+	PCAP=$1
+fi
+SAMPLE=0.01 #each sample.
+UNIT="kilobit"
+FLOW_NAME=1.1
+OUT_DIR="stats"
+
+mkdir -p $OUT_DIR
+captcp statistic --filter '10.1.2.2:*,10.1.3.1:*' $PCAP > $OUT_DIR/$PCAP-stats
