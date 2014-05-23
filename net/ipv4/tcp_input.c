@@ -776,6 +776,9 @@ static void tcp_set_rto(struct sock *sk)
 	 *    ACKs in some circumstances.
 	 */
 	inet_csk(sk)->icsk_rto = __tcp_set_rto(tp);
+	/*
+	 *
+	 */
 	//BINH
   //struct timeval t;
   //do_gettimeofday(&t);
@@ -791,6 +794,54 @@ static void tcp_set_rto(struct sock *sk)
 	 */
 	tcp_bound_rto(sk);
 }
+
+/* BINH: Calculate rto using duplicated ACK.
+ * This is a modified version of RTO patch in 3.12.
+ * Instead of using the icsk_rto calculated so that the rto value increases 
+ * and the timer restarts to the icsk_rto everytime, subtract the icsk_rto 
+ * by the amount of elapsed time from the last retransmission.
+ * Note: this only works when timestamp is enabled (tp->rx_opt.rcv_tsecr is available).
+ */
+static void tcp_set_rto_modified(struct sock *sk)
+{
+	const struct tcp_sock *tp = tcp_sk(sk);
+	//original calculated RTO
+	u32 calculated_rto_jiffies = __tcp_set_rto(tp);
+	//TODO: calculate elapsed_time_from_last_timer_restart.
+	//Current jiffies left for the RTO timer = fire time - current time.
+	//u32 timer_time_left = inet_csk(sk)->icsk_timeout - ns_to_jiffies(ktime_to_ns(ktime_get()));
+	//elapsed time from the last timer restart = icsk_rto - timer_time_left
+	//u32 elapsed_time_from_last_timer_restart_jiffies = inet_csk(sk)->icsk_rto - timer_time_left;
+	u32 elapsed_time_from_last_retran = 0;
+	//elapsed_time_from_last_retran = ns_to_jiffies(ktime_to_ns(ktime_get())) - tp->rx_opt.rcv_tsecr;
+	if (tp->sacked_out > 3) //ignore the first 3 sacks since the lost packet has not been retransmitted.
+		elapsed_time_from_last_retran = ns_to_jiffies(ktime_to_ns(ktime_get())) - tp->retrans_stamp;
+	//u32 new_rto_jiffies = calculated_rto_jiffies - elapsed_time_from_last_timer_restart_jiffies;
+	u32 new_rto_jiffies = calculated_rto_jiffies - elapsed_time_from_last_retran;
+	if (new_rto_jiffies <= 0)
+		new_rto_jiffies = 1;
+
+	inet_csk(sk)->icsk_rto = new_rto_jiffies;
+	//BINH
+  //struct timeval t;
+  //do_gettimeofday(&t);
+	//printk("%lld tcp_set_rto_modified, icsk_timeout = %d , icsk_rto = %d , ssthresh = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_ssthresh);
+	//printk("%lld tcp_set_rto_modified, icsk_timeout = %d , icsk_rto = %d , ssthresh = %d, calculated_rto = %d , timer_left = %d , elapsed_time_last_timer = %d , elapsed_time_from_last_retran = %d , last_retran = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_ssthresh, jiffies_to_usecs(calculated_rto_jiffies), jiffies_to_usecs(timer_time_left), jiffies_to_usecs(elapsed_time_from_last_timer_restart_jiffies), jiffies_to_usecs(elapsed_time_from_last_retran), jiffies_to_usecs(tp->rx_opt.rcv_tsecr));
+	printk("%lld tcp_set_rto_modified, icsk_timeout = %d , icsk_rto = %d , ssthresh = %d, calculated_rto = %d, elapsed_time_from_last_retran = %d , last_retran = %d\n", (long long) ktime_to_ns(ktime_get()), jiffies_to_usecs(inet_csk(sk)->icsk_timeout), jiffies_to_usecs(inet_csk(sk)->icsk_rto), tp->snd_ssthresh, jiffies_to_usecs(calculated_rto_jiffies), jiffies_to_usecs(elapsed_time_from_last_retran), jiffies_to_usecs(tp->retrans_stamp));
+	/* 2. Fixups made earlier cannot be right.
+	 *    If we do not estimate RTO correctly without them,
+	 *    all the algo is pure shit and should be replaced
+	 *    with correct one. It is exactly, which we pretend to do.
+	 */
+
+	/* NOTE: clamping at TCP_RTO_MIN is not required, current algo
+	 * guarantees that rto is higher.
+	 */
+	tcp_bound_rto(sk);
+}
+
+
+
 
 __u32 tcp_init_cwnd(const struct tcp_sock *tp, const struct dst_entry *dst)
 {
@@ -2908,9 +2959,13 @@ static inline bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 	 */
 	if (flag & FLAG_RETRANS_DATA_ACKED)
 		seq_rtt_us = -1L;
+	
 
-	if (seq_rtt_us < 0)
+	bool used_sack = 0;
+	if (seq_rtt_us < 0){
 		seq_rtt_us = sack_rtt_us;
+		used_sack = 1;
+	}
 
 	/* RTTM Rule: A TSecr value received in a segment is used to
 	 * update the averaged RTT measurement only if the segment
@@ -2926,7 +2981,11 @@ static inline bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 		return false;
 
 	tcp_rtt_estimator(sk, seq_rtt_us);
-	tcp_set_rto(sk);
+	//BINH
+	if (used_sack){	//updating RTO using dupacks
+		tcp_set_rto_modified(sk); //tp->rx_opt.rcv_tsecr is the TSECR in timestamp
+	}
+	else tcp_set_rto(sk); //updating RTO normaly
 
 	/* RFC6298: only reset backoff on valid RTT measurement. */
 	inet_csk(sk)->icsk_backoff = 0;
@@ -3134,6 +3193,10 @@ static int tcp_clean_rtx_queue(struct sock *sk, int prior_fackets,
 	}
 
 	rtt_update = tcp_ack_update_rtt(sk, flag, seq_rtt_us, sack_rtt_us);
+	
+	//BINH 3.12
+	//if (rtt_update || (flag & FLAG_ACKED))
+	//	tcp_rearm_rto(sk);
 
 	if (flag & FLAG_ACKED) {
 		const struct tcp_congestion_ops *ca_ops
